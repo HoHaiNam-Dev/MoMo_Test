@@ -30,8 +30,7 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
 
     private static final int MAX_CHUNK_SIZE = 1000; // Define the batch size
     private static final int FILE_PROCESSING_THREAD_COUNT = 2; // Number of threads for file processing
-    private static final int FILE_CHUNK_PROCESSING_THREAD_COUNT = 4;// Number of threads for chunk processing
-
+    private static final int FILE_CHUNK_PROCESSING_THREAD_COUNT = 4; // Number of threads for chunk processing
 
     @Override
     public void pushDataToKafka(List<String> filePaths) {
@@ -41,7 +40,11 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
         for (String filePath : filePaths) {
             // Submit each file processing task to the executor service
             Future<Void> future = fileProcessingExecutor.submit(() -> {
-                _processFileData(filePath);
+                try {
+                    _processFileData(filePath);
+                } catch (Exception e) {
+                    log.error("Error processing file: {}", filePath, e);
+                }
                 return null;
             });
             futures.add(future);
@@ -51,8 +54,11 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
         for (Future<Void> future : futures) {
             try {
                 future.get();
-            } catch (InterruptedException | ExecutionException e) {
-                log.error("Error processing file: ", e);
+            } catch (InterruptedException e) {
+                log.error("File processing was interrupted", e);
+                Thread.currentThread().interrupt(); // Restore the interrupted status
+            } catch (ExecutionException e) {
+                log.error("Execution error during file processing", e);
             }
         }
 
@@ -60,7 +66,7 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
         fileProcessingExecutor.shutdown();
     }
 
-    private void _processFileData(String filePath) {
+    private void _processFileData(String filePath) throws IOException {
         ExecutorService chunkProcessingExecutor = Executors.newFixedThreadPool(FILE_CHUNK_PROCESSING_THREAD_COUNT);
         File file = fileService.getFileFromPath(filePath, FileType.CSV);
 
@@ -85,17 +91,21 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
                 _sendToMessageQueue(chunkProcessingExecutor, chunk, chunkFutures);
             }
 
-            // Wait for all file processing tasks to complete
+            // Wait for all chunk processing tasks to complete
             for (Future<Void> future : chunkFutures) {
                 try {
                     future.get();
-                } catch (InterruptedException | ExecutionException e) {
-                    log.error("Error processing file: ", e);
+                } catch (InterruptedException e) {
+                    log.error("Chunk processing was interrupted", e);
+                    Thread.currentThread().interrupt(); // Restore the interrupted status
+                } catch (ExecutionException e) {
+                    log.error("Execution error during chunk processing", e);
                 }
             }
 
         } catch (IOException e) {
             log.error("I/O error while processing file: {}", filePath, e);
+            throw e; // Re-throw to allow the outer catch to handle
         } catch (Exception e) {
             log.error("Unexpected error while processing file: {}", filePath, e);
         } finally {
@@ -110,7 +120,7 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
         // Add the future to the list for tracking completion
         chunkFutures.add(chunkFuture);
 
-        // Create a new list for the next chunk
+        // Clear the list for the next chunk
         chunk.clear();
     }
 
@@ -123,9 +133,12 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
 
         @Override
         public Void call() {
-            kafkaService.sendBatch(chunk);
+            try {
+                kafkaService.sendBatch(chunk);
+            } catch (Exception e) {
+                log.error("Error sending chunk to Kafka", e);
+            }
             return null;
         }
     }
-
 }
