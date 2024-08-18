@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: data-pipeline
+  servlet:
+    multipart:
+      max-file-size: 500GB
+      max-request-size: 500GB
+  kafka:
+    topic: user_segments
+    bootstrap-servers: localhost:29092
+    key-serializer: org.apache.kafka.common.serialization.StringSerializer
+    value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    linger: 100
+    batch-size: 65536
+    buffer-memory: 33554432
+    acks: 1
+
+logging:
+  level:
+    org:
+      apache:
+        kafka: off
