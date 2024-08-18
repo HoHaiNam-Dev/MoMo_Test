@@ -32,19 +32,23 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
     private static final int FILE_PROCESSING_THREAD_COUNT = 2; // Number of threads for file processing
     private static final int FILE_CHUNK_PROCESSING_THREAD_COUNT = 4; // Number of threads for chunk processing
 
+
+    /**
+     * Push data to Kafka
+     *
+     * @param filePaths - List of file paths
+     */
     @Override
     public void pushDataToKafka(List<String> filePaths) {
         ExecutorService fileProcessingExecutor = Executors.newFixedThreadPool(FILE_PROCESSING_THREAD_COUNT);
         List<Future<Void>> futures = new ArrayList<>();
 
+        log.info("Processing {} files", filePaths.size());
         for (String filePath : filePaths) {
+            log.info("Processing file: {}", filePath);
             // Submit each file processing task to the executor service
             Future<Void> future = fileProcessingExecutor.submit(() -> {
-                try {
-                    _processFileData(filePath);
-                } catch (Exception e) {
-                    log.error("Error processing file: {}", filePath, e);
-                }
+                _processFileData(filePath);
                 return null;
             });
             futures.add(future);
@@ -64,56 +68,56 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
 
         // Shutdown the executor service
         fileProcessingExecutor.shutdown();
+        log.info("All files processed successfully");
     }
 
-    private void _processFileData(String filePath) throws IOException {
+
+    /**
+     * Process the data in a file
+     *
+     * @param filePath - Path to the file
+     * @throws IOException          - If an I/O error occurs
+     * @throws ExecutionException   - If an error occurs during execution
+     * @throws InterruptedException - If the execution is interrupted
+     */
+    private void _processFileData(String filePath) throws IOException, ExecutionException, InterruptedException {
         ExecutorService chunkProcessingExecutor = Executors.newFixedThreadPool(FILE_CHUNK_PROCESSING_THREAD_COUNT);
         File file = fileService.getFileFromPath(filePath, FileType.CSV);
 
-        try (BufferedReader brd = new BufferedReader(new FileReader(file, StandardCharsets.UTF_8))) {
-            List<Future<Void>> chunkFutures = new ArrayList<>();
-            List<String> chunk = new ArrayList<>();
-            String line;
+        BufferedReader brd = new BufferedReader(new FileReader(file, StandardCharsets.UTF_8));
+        List<Future<Void>> chunkFutures = new ArrayList<>();
+        List<String> chunk = new ArrayList<>();
+        String line;
 
-            while ((line = brd.readLine()) != null) {
-                if (!line.trim().isEmpty()) {
-                    chunk.add(line);
+        while ((line = brd.readLine()) != null) {
+            if (!line.trim().isEmpty()) {
+                chunk.add(line);
 
-                    // Send the chunk to the message queue if it reaches the batch size
-                    if (chunk.size() >= MAX_CHUNK_SIZE) {
-                        _sendToMessageQueue(chunkProcessingExecutor, chunk, chunkFutures);
-                    }
+                // Send the chunk to the message queue if it reaches the batch size
+                if (chunk.size() >= MAX_CHUNK_SIZE) {
+                    _sendToMessageQueue(chunkProcessingExecutor, chunk, chunkFutures);
                 }
             }
-
-            // Send the remaining chunk to the message queue
-            if (!chunk.isEmpty()) {
-                _sendToMessageQueue(chunkProcessingExecutor, chunk, chunkFutures);
-            }
-
-            // Wait for all chunk processing tasks to complete
-            for (Future<Void> future : chunkFutures) {
-                try {
-                    future.get();
-                } catch (InterruptedException e) {
-                    log.error("Chunk processing was interrupted", e);
-                    Thread.currentThread().interrupt(); // Restore the interrupted status
-                } catch (ExecutionException e) {
-                    log.error("Execution error during chunk processing", e);
-                }
-            }
-
-        } catch (IOException e) {
-            log.error("I/O error while processing file: {}", filePath, e);
-            throw e;
-        } catch (Exception e) {
-            log.error("Unexpected error while processing file: {}", filePath, e);
-            throw e;
-        } finally {
-            chunkProcessingExecutor.shutdown();
         }
+
+        // Send the remaining chunk to the message queue
+        if (!chunk.isEmpty()) {
+            _sendToMessageQueue(chunkProcessingExecutor, chunk, chunkFutures);
+        }
+
+        // Wait for all chunk processing tasks to complete
+        for (Future<Void> future : chunkFutures) {
+            future.get();
+        }
+
     }
 
+
+    /**
+     * @param chunkProcessingExecutor - Executor service for chunk processing
+     * @param chunk                   - List of data to process
+     * @param chunkFutures            - List of futures for tracking completion
+     */
     private void _sendToMessageQueue(ExecutorService chunkProcessingExecutor, List<String> chunk, List<Future<Void>> chunkFutures) {
         // Create a copy of the chunk to avoid ConcurrentModificationException
         List<String> chunkCopy = new ArrayList<>(chunk);
@@ -128,6 +132,10 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
         chunk.clear();
     }
 
+
+    /**
+     * Callable task to process a chunk of data
+     */
     private class ChunkProcessor implements Callable<Void> {
         private final List<String> chunk;
 
@@ -137,12 +145,7 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
 
         @Override
         public Void call() {
-            try {
-                kafkaService.sendBatch(chunk);
-            } catch (Exception e) {
-                log.error("Error sending chunk to Kafka", e);
-                throw e;
-            }
+            kafkaService.sendBatch(chunk);
             return null;
         }
     }

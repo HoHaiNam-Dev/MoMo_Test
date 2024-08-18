@@ -33,6 +33,12 @@ public class FileServiceImpl implements FileService {
         return file;
     }
 
+
+    /**
+     *  Validate file
+     * @param file - file to validate
+     * @param fileType - type of file that is expected
+     */
     private static void validateFile(File file, FileType fileType) {
         isValidPath(file.getPath());
         isFileExists(file);
@@ -40,6 +46,11 @@ public class FileServiceImpl implements FileService {
         isCorrectFileType(file, fileType);
     }
 
+
+    /**
+     * Check if file is empty
+     * @param file - file to check
+     */
     private static void isFileEmpty(File file) {
         if (file.length() == 0) {
             log.error("File is empty");
@@ -47,6 +58,10 @@ public class FileServiceImpl implements FileService {
         }
     }
 
+    /**
+     * Check if file exists
+     * @param file - file to check
+     */
     private static void isFileExists(File file) {
         if (!file.exists()) {
             log.error("File does not exist");
@@ -54,6 +69,11 @@ public class FileServiceImpl implements FileService {
         }
     }
 
+    /**
+     * Check if file is of correct type
+     * @param file - file to check
+     * @param fileType - type of file that is expected
+     */
     private static void isCorrectFileType(File file, FileType fileType) {
         if (!file.getName().endsWith(fileType.getExtension())) {
             log.error("File type must be: {}", fileType.getExtension());
@@ -61,6 +81,10 @@ public class FileServiceImpl implements FileService {
         }
     }
 
+    /**
+     * Check if path is valid
+     * @param path - path to check
+     */
     private static void isValidPath(String path) {
         try {
             Paths.get(path);

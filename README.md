@@ -61,8 +61,17 @@ This project is a data pipeline application that uses Spring Boot and Apache Kaf
      - **Scalability**: By processing data in a streaming manner, the application can scale to handle very large files without requiring proportional increases in memory. This design choice ensures that the application remains responsive and performant, even when processing large volumes of data.
    - **Implementation**: 
      - Application uses BufferedReader to read each line of the file. After reading a line, it is immediately processed and sent to Kafka, and the memory associated with that line is released, keeping the memory footprint low.
- 
-#### 2. Integration Messaging with Apache Kafka:
+
+### 2. Concurrent Processing with Executor Service:
+   - **Reasoning**:
+     - **Parallelism**: By using an ExecutorService with multiple threads, the application can process multiple lines concurrently, improving throughput and performance. This is particularly beneficial when dealing with multi-core processors, as it allows the application to utilize the available resources more effectively.
+     - **Asynchronous Processing**: ExecutorService enables asynchronous processing of data, allowing the application to process lines independently of each other. This decoupling of processing tasks improves responsiveness and ensures that the application can handle multiple requests simultaneously.
+     - **Resource Management**: ExecutorService manages the lifecycle of threads, including creation, execution, and termination. This simplifies thread management and ensures that resources are used efficiently.
+   - **Implementation**:
+     - Thread Pool for File Processing: The application uses a thread pool to manage the processing of multiple files concurrently. This allows for better resource utilization and faster processing when dealing with multiple files.
+     - Chunked Processing: The application reads and processes files in chunks. Each chunk is processed by a separate thread, improving throughput and allowing the application to scale with increasing data volumes.
+   
+#### 3. Integration Messaging with Apache Kafka:
    - **Reasoning**:
      - **Reliability**: Kafka provides a reliable and fault-tolerant messaging system that ensures data is not lost even in the event of failures. By sending data to Kafka, the application can guarantee that the data is safely stored and can be consumed by downstream systems.
      - **Scalability**: Kafka is designed to handle large volumes of data and can scale horizontally to accommodate increased throughput. This makes it well-suited for processing and streaming data in real-time.
@@ -77,7 +86,7 @@ This project is a data pipeline application that uses Spring Boot and Apache Kaf
        - `acks: 1`: This property specifies the number of acknowledgments the producer requires from the broker before considering a message as sent. An acknowledgment value of 1 ensures that the message is successfully written to the leader broker but does not wait for replication to other brokers. This provides a balance between reliability and performance.
      - Retry Mechanism: To handle potential connectivity issues with Kafka, a retry mechanism is implemented using Spring’s @Retryable annotation. This ensures that the application can recover from transient failures without losing data.
 
-#### 3. Optimizations and Scalability:
+#### 4. Optimizations and Scalability:
    - **Memory Usage**:
      - Minimizing Object Creation: The application minimizes unnecessary object creation within loops to optimize memory usage. For instance, variables are reused, and only essential data is retained in memory.
      - Avoiding Full File Load: By processing the file line by line, the application avoids loading the entire file into memory, which is particularly important when dealing with the file size may range from a few MBs to several hundred GBs.
@@ -85,3 +94,11 @@ This project is a data pipeline application that uses Spring Boot and Apache Kaf
      - Multi-stage Dockerfile: The Dockerfile is designed with a multi-stage build process. The first stage builds the application using Maven, while the second stage creates a lightweight runtime image using Alpine Linux. This results in smaller and more efficient Docker images.
      - Docker Compose Integration: Docker Compose is used to orchestrate the application along with Kafka and Zookeeper. This setup simplifies deployment and ensures that all necessary services are up and running with minimal manual intervention.
      - Scalability: The application can be easily scaled by running multiple instances of the Docker container. Kafka’s partitioning mechanism ensures that messages are evenly distributed across partitions, allowing the application to scale horizontally to handle increased throughput.
+
+## Testing Report
+- Testing sample data:
+  - 50MB file
+  - 200MB file
+  - 1GB file
+- ![img.png](img.png)
+

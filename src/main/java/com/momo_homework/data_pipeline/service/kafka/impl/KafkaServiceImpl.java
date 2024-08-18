@@ -11,7 +11,6 @@ import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -33,6 +32,11 @@ public class KafkaServiceImpl implements KafkaService {
         log.info("Record sent to Kafka");
     }
 
+
+    /**
+     * Send a batch of records to Kafka
+     * @param batch - List of records to send
+     */
     @Override
     @Retryable(
             retryFor = {KafkaException.class, TimeoutException.class},
@@ -44,36 +48,28 @@ public class KafkaServiceImpl implements KafkaService {
         String segment;
         String topic = kafkaProperties.getTopic();
 
-        try {
-            for (String line : batch) {
-                fields = line.split(DL);
+        for (String line : batch) {
+            fields = line.split(DL);
 
-                if (fields.length < 2) {
-                    log.info("Skipping line due to insufficient data: {}", line);
-                    continue;
-                }
-
-                userId = fields[0];
-                segment = fields[1];
-
-                if (userId == null || userId.trim().isEmpty() || segment == null || segment.trim().isEmpty()) {
-                    log.info("Skipping line due to null or empty userId or segment: {}", line);
-                    continue;
-                }
-
-                kafkaTemplate.send(topic, userId, line);
+            // Skip if fields length is less than 2
+            if (fields.length < 2) {
+                log.info("Skipping line due to insufficient data: {}", line);
+                continue;
             }
-            log.info("Batch of {} records sent to Kafka", batch.size());
-        } catch (ArrayIndexOutOfBoundsException e) {
-            log.error("ArrayIndexOutOfBoundsException: Malformed data in batch: {}", e.getMessage());
-            throw e;
-        } catch (NullPointerException e) {
-            log.error("NullPointerException: Unexpected null value encountered: {}",  e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            log.error("Unexpected error sending batch to Kafka: {}",  e.getMessage());
-            throw e;
+
+            userId = fields[0];
+            segment = fields[1];
+
+            // Skip if userId or segment is null or empty
+            if (userId == null || userId.trim().isEmpty() || segment == null || segment.trim().isEmpty()) {
+                log.info("Skipping line due to null or empty userId or segment: {}", line);
+                continue;
+            }
+
+            // Send the record to Kafka
+            kafkaTemplate.send(topic, userId, line);
         }
 
     }
+
 }
