@@ -42,7 +42,7 @@ public class KafkaProducerConfig {
     @Bean
     public NewTopic createTopic() {
         return TopicBuilder.name(kafkaProperties.getTopic())
-                .partitions(10)
+                .partitions(5)
                 .build();
     }
 }
