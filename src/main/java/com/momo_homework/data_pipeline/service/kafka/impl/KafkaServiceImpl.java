@@ -33,29 +33,45 @@ public class KafkaServiceImpl implements KafkaService {
     }
 
     @Override
+    @Retryable(
+            retryFor = {KafkaException.class, TimeoutException.class},
+            backoff = @Backoff(delay = 2000)
+    )
     public void sendBatch(List<String> batch) {
         String[] fields;
         String userId;
         String segment;
         String topic = kafkaProperties.getTopic();
-        for (String line : batch) {
-            fields = line.split(DL);
+        try {
+            for (String line : batch) {
+                fields = line.split(DL);
 
-            if (fields.length < 2) {
-                log.info("Skipping line due to insufficient data: {}", line);
-                continue;
+                if (fields.length < 2) {
+                    log.info("Skipping line due to insufficient data: {}", line);
+                    continue;
+                }
+
+                userId = fields[0];
+                segment = fields[1];
+
+                if (userId == null || userId.trim().isEmpty() || segment == null || segment.trim().isEmpty()) {
+                    log.info("Skipping line due to null or empty userId or segment: {}", line);
+                    continue;
+                }
+
+                kafkaTemplate.send(topic, userId, line);
             }
-
-            userId = fields[0];
-            segment = fields[1];
-
-            if (userId == null || userId.trim().isEmpty() || segment == null || segment.trim().isEmpty()) {
-                log.info("Skipping line due to null or empty userId or segment: {}", line);
-                continue;
-            }
-
-            kafkaTemplate.send(topic, userId, line);
+            log.info("Batch of {} records sent to Kafka", batch.size());
+        } catch (ArrayIndexOutOfBoundsException e) {
+            log.error("ArrayIndexOutOfBoundsException: Malformed data in batch: {}", e.getMessage());
+        } catch (KafkaException e) {
+            log.error("KafkaException: Error sending batch to Kafka: {}", e.getMessage());
+            // Consider adding retry logic here if needed
+        } catch (NullPointerException e) {
+            log.error("NullPointerException: Unexpected null value encountered: {}", e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error sending batch to Kafka: {}", e.getMessage());
         }
-        log.info("Batch of {} records sent to Kafka", batch.size());
+
     }
 }
