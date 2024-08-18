@@ -13,6 +13,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -21,7 +22,7 @@ import java.util.List;
 public class DataPipeLineServiceImpl implements DataPipeLineService {
     private final FileService fileService;
     private final KafkaService kafkaService;
-    private static final String DL = ","; // Assuming comma is the delimiter
+    private static final int BATCH_SIZE = 100; // Define the batch size
 
     @Override
     public void pushDataToKafka(List<String> filePaths) {
@@ -38,36 +39,34 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
 
     private void _processFileData(String filePath) {
         File file = fileService.getFileFromPath(filePath, FileType.CSV);
-
+        List<String> batch = new ArrayList<>();
         try (BufferedReader brd = new BufferedReader(new FileReader(file, StandardCharsets.UTF_8))) {
             String line;
-            String[] fields;
-            String userId;
-            String segment;
             while ((line = brd.readLine()) != null) {
                 // Skip empty lines
                 if (!line.trim().isEmpty()) {
-                    fields = line.split(DL);
-
-                    if (fields.length < 2) {
-                        log.info("Skipping line due to insufficient data: {}", line);
-                        continue;
+                    batch.add(line);
+                    // If batch size is reached, send the batch to Kafka
+                    if (batch.size() >= BATCH_SIZE) {
+                        kafkaService.sendBatch(batch);
+                        batch.clear(); // Clear the batch after sending
                     }
-
-                    userId = fields[0];
-                    segment = fields[1];
-
-                    if (userId == null || userId.trim().isEmpty() || segment == null || segment.trim().isEmpty()) {
-                        log.info("Skipping line due to null or empty userId or segment: {}", line);
-                        continue;
-                    }
-
-                    kafkaService.send(userId, line);
                 }
+            }
+
+            // Send any remaining lines that didn't fill up the last batch
+            if (!batch.isEmpty()) {
+                kafkaService.sendBatch(batch);
             }
 
         } catch (IOException e) {
             log.error("I/O error while processing file: {}", filePath, e);
+        } catch (ArrayIndexOutOfBoundsException e) {
+            log.error("ArrayIndexOutOfBoundsException: Malformed line in file: {}", filePath, e);
+        } catch (NullPointerException e) {
+            log.error("NullPointerException: Unexpected null value encountered: {}", filePath, e);
+        } catch (Exception e) {
+            log.error("Unexpected error while processing file: {}", filePath, e);
         }
     }
 
