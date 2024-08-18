@@ -11,6 +11,7 @@ import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -42,6 +43,7 @@ public class KafkaServiceImpl implements KafkaService {
         String userId;
         String segment;
         String topic = kafkaProperties.getTopic();
+
         try {
             for (String line : batch) {
                 fields = line.split(DL);
@@ -64,13 +66,13 @@ public class KafkaServiceImpl implements KafkaService {
             log.info("Batch of {} records sent to Kafka", batch.size());
         } catch (ArrayIndexOutOfBoundsException e) {
             log.error("ArrayIndexOutOfBoundsException: Malformed data in batch: {}", e.getMessage());
-        } catch (KafkaException e) {
-            log.error("KafkaException: Error sending batch to Kafka: {}", e.getMessage());
-            // Consider adding retry logic here if needed
+            throw e;
         } catch (NullPointerException e) {
-            log.error("NullPointerException: Unexpected null value encountered: {}", e.getMessage());
+            log.error("NullPointerException: Unexpected null value encountered: {}",  e.getMessage());
+            throw e;
         } catch (Exception e) {
-            log.error("Unexpected error sending batch to Kafka: {}", e.getMessage());
+            log.error("Unexpected error sending batch to Kafka: {}",  e.getMessage());
+            throw e;
         }
 
     }

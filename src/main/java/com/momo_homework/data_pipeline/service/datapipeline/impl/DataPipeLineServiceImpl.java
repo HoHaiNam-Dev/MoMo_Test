@@ -105,17 +105,21 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
 
         } catch (IOException e) {
             log.error("I/O error while processing file: {}", filePath, e);
-            throw e; // Re-throw to allow the outer catch to handle
+            throw e;
         } catch (Exception e) {
             log.error("Unexpected error while processing file: {}", filePath, e);
+            throw e;
         } finally {
             chunkProcessingExecutor.shutdown();
         }
     }
 
     private void _sendToMessageQueue(ExecutorService chunkProcessingExecutor, List<String> chunk, List<Future<Void>> chunkFutures) {
+        // Create a copy of the chunk to avoid ConcurrentModificationException
+        List<String> chunkCopy = new ArrayList<>(chunk);
+
         // Submit the chunk for processing
-        Future<Void> chunkFuture = chunkProcessingExecutor.submit(new ChunkProcessor(chunk));
+        Future<Void> chunkFuture = chunkProcessingExecutor.submit(new ChunkProcessor(chunkCopy));
 
         // Add the future to the list for tracking completion
         chunkFutures.add(chunkFuture);
@@ -137,6 +141,7 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
                 kafkaService.sendBatch(chunk);
             } catch (Exception e) {
                 log.error("Error sending chunk to Kafka", e);
+                throw e;
             }
             return null;
         }
