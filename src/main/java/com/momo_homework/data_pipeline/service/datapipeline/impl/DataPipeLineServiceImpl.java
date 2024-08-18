@@ -15,6 +15,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 @Service
 @RequiredArgsConstructor
@@ -22,51 +26,100 @@ import java.util.List;
 public class DataPipeLineServiceImpl implements DataPipeLineService {
     private final FileService fileService;
     private final KafkaService kafkaService;
-    private static final int BATCH_SIZE = 100; // Define the batch size
+
+    private static final int MAX_CHUNK_SIZE = 1000; // Define the batch size
+    private static final int FILE_PROCESSING_THREAD_COUNT = 2; // Number of threads for file processing
+    private static final int FILE_CHUNK_PROCESSING_THREAD_COUNT = 4;// Number of threads for chunk processing
+
 
     @Override
     public void pushDataToKafka(List<String> filePaths) {
+        ExecutorService fileProcessingExecutor = Executors.newFixedThreadPool(FILE_PROCESSING_THREAD_COUNT);
+        List<Future<Void>> futures = new ArrayList<>();
+
         for (String filePath : filePaths) {
-            log.info("Starting to process file: {}", filePath);
-
-            _processFileData(filePath);
-
-            log.info("Finished processing file: {}", filePath);
-
+            // Submit each file processing task to the executor service
+            Future<Void> future = fileProcessingExecutor.submit(() -> {
+                _processFileData(filePath);
+                return null;
+            });
+            futures.add(future);
         }
+
+        // Wait for all file processing tasks to complete
+        for (Future<Void> future : futures) {
+            try {
+                future.get();
+            } catch (Exception e) {
+                log.error("Error processing file: ", e);
+            }
+        }
+
+        // Shutdown the executor service
+        fileProcessingExecutor.shutdown();
     }
 
-
     private void _processFileData(String filePath) {
+        ExecutorService chunkProcessingExecutor = Executors.newFixedThreadPool(FILE_CHUNK_PROCESSING_THREAD_COUNT);
         File file = fileService.getFileFromPath(filePath, FileType.CSV);
-        List<String> batch = new ArrayList<>();
+
         try (BufferedReader brd = new BufferedReader(new FileReader(file, StandardCharsets.UTF_8))) {
+            List<Future<Void>> chunkFutures = new ArrayList<>();
+            List<String> chunk = new ArrayList<>();
             String line;
+
             while ((line = brd.readLine()) != null) {
-                // Skip empty lines
                 if (!line.trim().isEmpty()) {
-                    batch.add(line);
-                    // If batch size is reached, send the batch to Kafka
-                    if (batch.size() >= BATCH_SIZE) {
-                        kafkaService.sendBatch(batch);
-                        batch.clear(); // Clear the batch after sending
+                    chunk.add(line);
+
+                    // Send the chunk to the message queue if it reaches the batch size
+                    if (chunk.size() >= MAX_CHUNK_SIZE) {
+                        _sendToMessageQueue(chunkProcessingExecutor, chunk, chunkFutures);
                     }
                 }
             }
 
-            // Send any remaining lines that didn't fill up the last batch
-            if (!batch.isEmpty()) {
-                kafkaService.sendBatch(batch);
+            // Send the remaining chunk to the message queue
+            if (!chunk.isEmpty()) {
+                _sendToMessageQueue(chunkProcessingExecutor, chunk, chunkFutures);
+            }
+
+            // Wait for all chunk processing tasks to complete
+            for (Future<Void> chunkFuture : chunkFutures) {
+                chunkFuture.get();
             }
 
         } catch (IOException e) {
             log.error("I/O error while processing file: {}", filePath, e);
-        } catch (ArrayIndexOutOfBoundsException e) {
-            log.error("ArrayIndexOutOfBoundsException: Malformed line in file: {}", filePath, e);
-        } catch (NullPointerException e) {
-            log.error("NullPointerException: Unexpected null value encountered: {}", filePath, e);
         } catch (Exception e) {
             log.error("Unexpected error while processing file: {}", filePath, e);
+        } finally {
+            chunkProcessingExecutor.shutdown();
+        }
+    }
+
+    private void _sendToMessageQueue(ExecutorService chunkProcessingExecutor, List<String> chunk, List<Future<Void>> chunkFutures) {
+        // Submit the chunk for processing
+        Future<Void> chunkFuture = chunkProcessingExecutor.submit(new ChunkProcessor(chunk));
+
+        // Add the future to the list for tracking completion
+        chunkFutures.add(chunkFuture);
+
+        // Create a new list for the next chunk
+        chunk.clear();
+    }
+
+    private class ChunkProcessor implements Callable<Void> {
+        private final List<String> chunk;
+
+        public ChunkProcessor(List<String> chunk) {
+            this.chunk = chunk;
+        }
+
+        @Override
+        public Void call() {
+            kafkaService.sendBatch(chunk);
+            return null;
         }
     }
 
