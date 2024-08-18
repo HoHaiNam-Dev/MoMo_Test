@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -50,7 +51,7 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
         for (Future<Void> future : futures) {
             try {
                 future.get();
-            } catch (Exception e) {
+            } catch (InterruptedException | ExecutionException e) {
                 log.error("Error processing file: ", e);
             }
         }
@@ -84,9 +85,13 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
                 _sendToMessageQueue(chunkProcessingExecutor, chunk, chunkFutures);
             }
 
-            // Wait for all chunk processing tasks to complete
-            for (Future<Void> chunkFuture : chunkFutures) {
-                chunkFuture.get();
+            // Wait for all file processing tasks to complete
+            for (Future<Void> future : chunkFutures) {
+                try {
+                    future.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    log.error("Error processing file: ", e);
+                }
             }
 
         } catch (IOException e) {
