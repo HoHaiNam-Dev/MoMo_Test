@@ -28,7 +28,7 @@ public class DataPipeLineServiceImpl implements DataPipeLineService {
     private final FileService fileService;
     private final KafkaService kafkaService;
 
-    private static final int MAX_CHUNK_SIZE = 1000; // Define the batch size
+    private static final int MAX_CHUNK_SIZE = 100; // Define the batch size
     private static final int FILE_PROCESSING_THREAD_COUNT = 2; // Number of threads for file processing
     private static final int FILE_CHUNK_PROCESSING_THREAD_COUNT = 4; // Number of threads for chunk processing
 

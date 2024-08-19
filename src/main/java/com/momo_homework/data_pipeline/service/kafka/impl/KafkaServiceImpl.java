@@ -68,7 +68,10 @@ public class KafkaServiceImpl implements KafkaService {
 
             // Send the record to Kafka
             kafkaTemplate.send(topic, userId, line);
+
         }
+        log.info("Batch of {} records sent to Kafka", batch.size());
+        batch.clear();
 
     }
 

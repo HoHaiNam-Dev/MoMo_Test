@@ -45,7 +45,7 @@ This project is a data pipeline application that uses Spring Boot and Apache Kaf
 1. Import the project into your IDE.
 2. Run the `DataPipelineApplication` class.
 
-### Option 3: Run the application using docker-compose.
+### Option 3: Run the application using docker-compose. (_**Recommended**_)
 1. Navigate to the project directory.
 2. Make sure you have Docker and Docker Compose installed. 
 3. Run the following command: <pre>docker-compose up -d</pre>
@@ -95,7 +95,17 @@ This project is a data pipeline application that uses Spring Boot and Apache Kaf
      - Docker Compose Integration: Docker Compose is used to orchestrate the application along with Kafka and Zookeeper. This setup simplifies deployment and ensures that all necessary services are up and running with minimal manual intervention.
      - Scalability: The application can be easily scaled by running multiple instances of the Docker container. Kafka’s partitioning mechanism ensures that messages are evenly distributed across partitions, allowing the application to scale horizontally to handle increased throughput.
 
-## Testing Report
+## Testing
+### Manual Testing
+- For testing, you can put the file in the `test-data` folder it will mount to the container, and then use the following curl command to send the data to the application:
+    - `curl --location 'localhost:8080/api/v1/pipeline/push-data' \
+      --header 'Content-Type: application/json' \
+      --data '[
+      "/app/data/LargeUserSegments_50MB.csv"
+      ]'`
+    - You can replace the file name `LargeUserSegments_50MB.csv` with the file you want to test.
+- If you want to generate a large file, you can go to `DataPipelineApplication` class and uncomment the `_generateTestingFile()` method, then run the application. It will generate a large file with random data and automatically save it to the `test-data` folder.
+### Self-Testing With Jmeter
 - Testing sample data:
   - 50MB file
   - 200MB file

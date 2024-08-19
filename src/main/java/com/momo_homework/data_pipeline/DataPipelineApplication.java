@@ -22,7 +22,7 @@ public class DataPipelineApplication {
     private static void _generateTestingFile() {
         String filePath = "test-data/LargeUserSegments_1GB.csv";
 
-        long targetFileSizeBytes = 1L * 1024L * 1024L * 1024L; // 10GB
+        long targetFileSizeBytes = 1L * 1024L * 1024L * 1024L; // 1GB
         int bytesPerRow = 100; // Estimate: Adjust based on the actual row size
         long currentFileSizeBytes = 0;
 
